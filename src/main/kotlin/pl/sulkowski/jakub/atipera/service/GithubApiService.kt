@@ -30,6 +30,9 @@ class GithubApiService {
 
         val githubRepoResponseBody = githubRepoResponse.body()
         val rawRepos = gson.fromJson<List<GithubReposResponseModel>>(githubRepoResponseBody, reposTypeToken)
+            .filter { repo ->
+                repo.owner.login == username
+            }
 
         return aggregateDataForReturn(rawRepos)
     }
