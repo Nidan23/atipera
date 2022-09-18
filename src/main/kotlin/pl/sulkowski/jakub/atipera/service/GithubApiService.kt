@@ -18,15 +18,25 @@ class GithubApiService(
     private val branchesTypeToken = object : TypeToken<List<GithubBranchResponseModel>>() {}.type
 
     fun getUserReposByUsername(username: String): List<RepositoryModel> {
-        val githubRepoResponse = getUserRepos(username)
+        var pageCounter = 1
+        var githubRepoResponse: HttpResponse<String>
+        var githubRepoResponseBody = ""
+        val rawRepos: MutableList<GithubReposResponseModel> = mutableListOf()
 
-        validateResponse(githubRepoResponse)
+        while(githubRepoResponseBody != GITHUB_EMPTY_RESPONSE) {
+            githubRepoResponse = githubApiConnectorService.getUserRepos(username, pageCounter)
+            githubRepoResponseBody = githubRepoResponse.body()
 
-        val githubRepoResponseBody = githubRepoResponse.body()
-        val rawRepos = gson.fromJson<List<GithubReposResponseModel>>(githubRepoResponseBody, reposTypeToken)
-            .filter { repo ->
-                repo.owner.login == username
-            }
+            if (githubRepoResponseBody == GITHUB_EMPTY_RESPONSE)
+                break
+
+            validateResponse(githubRepoResponse)
+            rawRepos.addAll(gson.fromJson<List<GithubReposResponseModel>>(githubRepoResponseBody, reposTypeToken)
+                .filter { repo ->
+                    !repo.fork
+                } as MutableList<GithubReposResponseModel>)
+            pageCounter++
+        }
 
         return aggregateDataForReturn(rawRepos)
     }
@@ -36,7 +46,7 @@ class GithubApiService(
          rawRepos.map { rawRepo ->
             rawRepo.branches_url = rawRepo.branches_url.substring(0, rawRepo.branches_url.length - GITHUB_BRANCH_URL_SUFFIX.length)
 
-            val githubBranchesResponse = getReposBranches(rawRepo.branches_url).body()
+            val githubBranchesResponse = githubApiConnectorService.getReposBranches(rawRepo.branches_url).body()
             val rawBranches = gson.fromJson<List<GithubBranchResponseModel>>(githubBranchesResponse, branchesTypeToken)
 
             val branches: List<BranchModel> = rawBranches.map { rawBranch ->
